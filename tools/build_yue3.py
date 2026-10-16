@@ -113,7 +113,10 @@ plans = [p_ for p_ in plans if p_[3]]
 plans.sort(key=lambda p_: p_[0])
 print("scripts", len(plans), "fields", sum(len(p[3]) for p in plans))
 
-RUN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9 .'\-&/]*[A-Za-z0-9])?")
+_LAT = re.escape("".join(chr(c) for c in range(0x21, 0x7F) if chr(c) not in "<>|\\"))
+# any run of half-width ASCII (letters, digits AND the subtitle's own ASCII punctuation such as
+# ".meme", "I...see...", "=3=", "99%", "(彈)") is kept exactly as written and rendered as a Latin strip
+RUN_RE = re.compile(r"[%s](?:[ %s]*[%s])?" % (_LAT, _LAT, _LAT))
 def tokens(t):
     for part in re.split(r"(\\n|\\k|<R|\||>)", t):
         if part in ("\\n", "\\k", "<R", "|", ">"): yield ("tok", part); continue
