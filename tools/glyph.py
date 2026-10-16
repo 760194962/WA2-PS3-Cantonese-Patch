@@ -149,3 +149,22 @@ def render_packed(text,size=27,cy=19,weight="Medium",stroke=2,track=1.0,cap=38):
             return im
         cells.append(_compose(draw(0),draw(stroke)))
     return cells
+
+
+def render_prop(ch,size=27,cy=19,weight="Medium",stroke=2,pen=5,track=1):
+    """Half-width (1-byte) glyph for the patched engine: the engine draws the 40px cell at pen-5, so the glyph's
+    pen origin sits at x=`pen` inside the cell and the advance (returned, atlas px) is the font's own advance + track."""
+    if ord(ch) in _cmap(weight): font=ImageFont.truetype(YP%weight,size,layout_engine=ImageFont.Layout.BASIC)
+    else: font=ImageFont.truetype(FONTFILE,size,index=HK)
+    m=Image.new("L",(40,40),0); ImageDraw.Draw(m).text((pen,cy),ch,fill=255,font=font,anchor="lm")
+    o=Image.new("L",(40,40),0); ImageDraw.Draw(o).text((pen,cy),ch,fill=255,font=font,anchor="lm",stroke_width=stroke,stroke_fill=255)
+    cell=_compose(m,o)
+    # The dialogue renderer (EBOOT 0x3e21c callers) centres each glyph's ink box on a fixed slot; the generic one (0x263c) just
+    # draws the cell at pen-5. Make the ink box symmetric about x=12 (= pen+7 for a half slot) with one near-invisible
+    # pixel, so both place the glyph origin (x=5) exactly at the pen.
+    a=(cell>>12)&15; cols=np.nonzero(a.any(0))[0]
+    if len(cols):
+        L,R=int(cols[0]),int(cols[-1])
+        if (L+R)/2<12 and 24-L>R: cell[20,min(39,24-L)]=(1<<12)|(2<<8)|(3<<4)|3
+        elif (L+R)/2>12 and 24-R<L: cell[20,max(0,24-R)]=(1<<12)|(2<<8)|(3<<4)|3
+    return cell, font.getlength(ch)+track

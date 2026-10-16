@@ -40,6 +40,13 @@ def elzma_compress(data):
 
 # ---------------- font table ----------------
 tb = font_table(elf)
+# The ASCII (half-width) block is the first slots of the table. The game has no slot for a few ASCII characters the
+# subtitles use (Q : -); reuse three slots the game never needs ({ } [) so every ASCII character is drawn as itself.
+_half = [i for i, c in enumerate(tb) if (c & 0xFF) == 0x20 and (c >> 8) < 0x80]
+assert _half == list(range(_half[0], _half[0] + len(_half)))
+_blk = {chr(tb[i] >> 8) for i in _half} - set("{}[") | set("Q:-")
+assert len(_blk) == len(_half)
+tb[_half[0]:_half[-1] + 1] = [(ord(ch) << 8) | 0x20 for ch in sorted(_blk)]
 code_of = {}
 for c in tb:
     if c >> 8 >= 0x81:
@@ -53,7 +60,16 @@ from scr import lines as scr_lines, load as scr_load
 NORM = {"〜": "～", "·": "・", "‧": "・", " ": "　", ",": "，", "!": "！", "?": "？", "(": "（", ")": "）",
         ":": "：", ";": "；", "~": "～", "-": "－", "&": "＆", "/": "／", "'": "’", '"': "”",
         "%": "％", ".": "．", "=": "＝", "_": "＿", "—": "―", "︰": "：", "﹐": "，"}
+LATIN_STRIPS = os.environ.get("LATIN_STRIPS") == "1"    # 1: whole English words as proportional strips; default: one glyph per letter
 ASCII_OK = {chr(c >> 8) for c in tb if (c & 0xFF) == 0x20 and 0x30 <= (c >> 8) < 0x7B and chr(c >> 8).isalnum()}
+if not LATIN_STRIPS: ASCII_OK |= {chr(c >> 8) for c in tb if (c & 0xFF) == 0x20 and 0x20 <= (c >> 8) < 0x7F and chr(c >> 8) not in ",<>|\\"}
+PROP = not LATIN_STRIPS     # proportional half-width glyphs: patch the engine's draw routine to use a per-glyph advance table
+PROP_CELLS = {}; ADV = bytearray([14]) * 256    # advance in atlas px (at the engine's 28px reference), indexed by byte value
+if PROP:
+    from glyph import render_prop
+    for c_ in tb:
+        if (c_ & 0xFF) == 0x20 and 0x20 <= (c_ >> 8) < 0x7F:
+            cell_, adv_ = render_prop(chr(c_ >> 8)); PROP_CELLS[c_] = cell_; ADV[c_ >> 8] = max(1, min(255, int(round(adv_))))
 def norm_char(ch):
     if ch in ASCII_OK: return ch
     ch = NORM.get(ch, ch)
@@ -131,7 +147,7 @@ def tokens(t):
     for part in re.split(r"(\\n|\\k|<R|\||>)", t):
         if part in ("\\n", "\\k", "<R", "|", ">"): yield ("tok", part); continue
         pos = 0
-        for mm in RUN_RE.finditer(part):
+        for mm in (RUN_RE.finditer(part) if LATIN_STRIPS else ()):
             for ch in part[pos:mm.start()]: yield ("ch", ch)
             yield ("run", mm.group()); pos = mm.end()
         for ch in part[pos:]: yield ("ch", ch)
@@ -200,6 +216,66 @@ if MODE != "plain":
     assert elf[0xCA04:0xCA0C] == bytes.fromhex("3C6000113063E3F0")
     ev_ = EMPTY + 0x10000; assert ev_ & 0x8000 == 0
     elf[0xCA04:0xCA0C] = struct.pack(">II", 0x3C600000 | (ev_ >> 16), 0x30630000 | (ev_ & 0xFFFF))
+
+# ---- proportional 1-byte glyphs: the draw routine (0x263c) advances size/2 for a 1-byte code; replace that with
+#      size * ADV[byte] / 28 (ADV = glyph advance in atlas px). Table + trampoline live in the padding after the code array.
+if PROP:
+    TBL, CAVE = 0x123000, 0x123100
+    assert NEW_N * 2 + ARR < TBL and set(elf[TBL:CAVE + 0x40]) == {0}
+    assert struct.unpack(">II", elf[0x274c:0x2754]) == (0x7FF60E70, 0x7ED60194), "draw routine differs"   # srawi r22,r31,1 ; addze r22,r22
+    def I(*w): return b"".join(struct.pack(">I", x) for x in w)
+    VA = lambda o: o + 0x10000
+    elf[TBL:TBL + 256] = bytes(ADV)
+    cave = [(15 << 26) | (22 << 21) | (VA(TBL) >> 16),                     # lis    r22, hi(tbl)
+            (14 << 26) | (22 << 21) | (22 << 16) | (VA(TBL) & 0xFFFF),     # addi   r22, r22, lo(tbl)   (lo < 0x8000)
+            (31 << 26) | (22 << 21) | (22 << 16) | (4 << 11) | (87 << 1),  # lbzx   r22, r22, r4        r4 = the byte
+            (31 << 26) | (22 << 21) | (22 << 16) | (31 << 11) | (235 << 1),# mullw  r22, r22, r31       r31 = size
+            (14 << 26) | (22 << 21) | (22 << 16) | 14,                     # addi   r22, r22, 14
+            (14 << 26) | (0 << 21) | (0 << 16) | 28,                       # li     r0, 28
+            (31 << 26) | (22 << 21) | (22 << 16) | (0 << 11) | (491 << 1)] # divw   r22, r22, r0
+    assert VA(TBL) & 0x8000 == 0
+    back = 0x2768 - (CAVE + 4 * len(cave))
+    cave.append((18 << 26) | (back & 0x03FFFFFC))                         # b      0x2768
+    elf[CAVE:CAVE + 4 * len(cave)] = I(*cave)
+    elf[0x274c:0x2750] = I((18 << 26) | ((CAVE - 0x274c) & 0x03FFFFFC))  # b      cave
+    # dialogue / message-window renderer: after the per-char call (0x41400) the pen moves by (size+1)>>1 for a 1-byte code
+    # (0x41404..0x41410, result in r4). Same table, byte = base[idx] (stack slots 0x52c / 0x190), size = 0x1a0(r1).
+    CAVE2 = 0x123180
+    assert struct.unpack(">4I", elf[0x41404:0x41414]) == (0x808101A0, 0x30840001, 0x7C840E70, 0x7C840194), "dialogue routine differs"
+    c2 = [(32 << 26) | (3 << 21) | (1 << 16) | 0x52C,                       # lwz   r3, 0x52c(r1)    string base
+          (32 << 26) | (4 << 21) | (1 << 16) | 0x190,                       # lwz   r4, 0x190(r1)    char index
+          (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (87 << 1),       # lbzx  r3, r3, r4       the byte
+          (15 << 26) | (4 << 21) | (VA(TBL) >> 16),                         # lis   r4, hi(tbl)
+          (14 << 26) | (4 << 21) | (4 << 16) | (VA(TBL) & 0xFFFF),          # addi  r4, r4, lo(tbl)
+          (31 << 26) | (3 << 21) | (4 << 16) | (3 << 11) | (87 << 1),       # lbzx  r3, r4, r3       advance (atlas px)
+          (32 << 26) | (4 << 21) | (1 << 16) | 0x1A0,                       # lwz   r4, 0x1a0(r1)    size
+          (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (235 << 1),      # mullw r3, r3, r4
+          (14 << 26) | (3 << 21) | (3 << 16) | 14,                          # addi  r3, r3, 14
+          (14 << 26) | (0 << 21) | (0 << 16) | 28,                          # li    r0, 28
+          (31 << 26) | (4 << 21) | (3 << 16) | (0 << 11) | (491 << 1)]      # divw  r4, r3, r0
+    c2.append((18 << 26) | ((0x41414 - (CAVE2 + 4 * len(c2))) & 0x03FFFFFC))   # b 0x41414
+    assert set(elf[CAVE2:CAVE2 + 4 * len(c2)]) == {0}
+    elf[CAVE2:CAVE2 + 4 * len(c2)] = I(*c2)
+    elf[0x41404:0x41408] = I((18 << 26) | ((CAVE2 - 0x41404) & 0x03FFFFFC))   # b cave2
+    # ...but 0x41404 only feeds 0x18c(r1). The pen itself (0x184) moves at 0x41480..0x414ac:
+    #   pen += (size >> 1) + (spacing 0x4fc >> 1)        -> replace size>>1 (0x41480..0x41488, result in r3)
+    CAVE3 = 0x123200
+    assert struct.unpack(">3I", elf[0x41480:0x4148c]) == (0x806101A0, 0x7C630E70, 0x7C630194), "dialogue pen code differs"
+    c3 = [(32 << 26) | (3 << 21) | (1 << 16) | 0x52C,                       # lwz   r3, 0x52c(r1)    string base
+          (32 << 26) | (4 << 21) | (1 << 16) | 0x190,                       # lwz   r4, 0x190(r1)    char index
+          (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (87 << 1),       # lbzx  r3, r3, r4       the byte
+          (15 << 26) | (4 << 21) | (VA(TBL) >> 16),                         # lis   r4, hi(tbl)
+          (14 << 26) | (4 << 21) | (4 << 16) | (VA(TBL) & 0xFFFF),          # addi  r4, r4, lo(tbl)
+          (31 << 26) | (3 << 21) | (4 << 16) | (3 << 11) | (87 << 1),       # lbzx  r3, r4, r3       advance (atlas px)
+          (32 << 26) | (4 << 21) | (1 << 16) | 0x1A0,                       # lwz   r4, 0x1a0(r1)    size
+          (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (235 << 1),      # mullw r3, r3, r4
+          (14 << 26) | (3 << 21) | (3 << 16) | 14,                          # addi  r3, r3, 14
+          (14 << 26) | (4 << 21) | (0 << 16) | 28,                          # li    r4, 28           (r4 is reloaded at 0x4148c)
+          (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (491 << 1)]      # divw  r3, r3, r4
+    c3.append((18 << 26) | ((0x4148c - (CAVE3 + 4 * len(c3))) & 0x03FFFFFC))   # b 0x4148c
+    assert CAVE3 + 4 * len(c3) < EMPTY and set(elf[CAVE3:CAVE3 + 4 * len(c3)]) == {0}
+    elf[CAVE3:CAVE3 + 4 * len(c3)] = I(*c3)
+    elf[0x41480:0x41484] = I((18 << 26) | ((CAVE3 - 0x41480) & 0x03FFFFFC))   # b cave3
 
 # scripts -> appended as a new PT_LOAD segment (VA 0x1200000)
 NEWVA = 0x1209A00   # first 0x100-aligned address after .bss (ends 0x12099F0)
@@ -280,7 +356,9 @@ _yp_cmap = _g._cmap("Medium")
 # Latin letters / digits in the round font too (half-width slots + full-width Ａ-ｚ０-９)
 for i, c in enumerate(tb):
     r_, c_ = divmod(i, COLS)
-    if (c & 0xFF) == 0x20 and 0x21 <= (c >> 8) < 0x7F:
+    if PROP and c in PROP_CELLS:
+        img[r_*CELL:(r_+1)*CELL, c_*CELL:(c_+1)*CELL] = PROP_CELLS[c]
+    elif (c & 0xFF) == 0x20 and 0x21 <= (c >> 8) < 0x7F:
         img[r_*CELL:(r_+1)*CELL, c_*CELL:(c_+1)*CELL] = (render_cell(chr(c >> 8), size=24, cx=12, weight="Medium", half=True, maxw=19) if chr(c >> 8) in "WMmw" else render_cell(chr(c >> 8), size=27, cx=12, weight="Medium", half=True, maxw=15))
     elif 0x8141 <= c <= 0x81FC:                      # full-width punctuation / symbols
         ch = code2char(c)
