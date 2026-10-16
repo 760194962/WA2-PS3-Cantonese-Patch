@@ -29,17 +29,24 @@
 2. `make_ps3_eboot.bat`：用 scetool 签成 NPDRM UEXEC（key-revision 01、FREE），输出 `ps3_npdrm_v3\update_patched\EBOOT.BIN`，放到 PS3 的 `/dev_hdd0/game/BLJM60571/USRDIR/`。
 3. EBOOT 和 data.dar 必须是同一次构建，否则字会错位。
 
-## 构建（Linux）
+## 构建
+
+仓库文件夹本身就是素材文件夹（`tools/paths.py` 默认 DATA=仓库根目录；也可设环境变量 `WA2_DATA` 或写 `config.json` `{"data_dir": "..."}`）。需要这些（都不提交）：
 
 ```
-python3 tools/run_ic.py        # 对齐 IC 12 集 ASS 与游戏脚本 → ic_align.pkl
-python3 tools/make_map.py      # 过滤、二周目、局部修正 → ic_map.pkl
-python3 tools/build_yue3.py out # 生成 EBOOT.elf / 02309.elzma / 02309.size
-python3 tools/verify_elf.py out # 校验所有脚本能从新 EBOOT 正确解出
+WHITE ALBUM2 [BLJM60571]/PS3_GAME/USRDIR/EBOOT.elf   原版 v1.00 解密 EBOOT（6,964,168 字节）
+dar_dump/02309.bin                                   data.dar 第 2309 项解出的原字库包
+ic_ass/*.ass                                         粤语字幕
+fonts/YuPearl-1.011/tw/*.ttf                         俊羽圓體（GenSenRounded2TC-M.otf 缺时自动下载）
 ```
 
-`tools/common.py`、`tools/scr.py` 里的路径是开发环境的绝对路径，换环境要改。
-`lzenc.c` 用 LZMA SDK（pylzma 0.6.1 源码里的 `src/sdk/C`）编译：无结束标记、dict 2^14、lc3 lp0 pb2。游戏的解码器不接受带结束标记的流。
+```
+pip install numba opencc-python-reimplemented fonttools pillow pylzma
+python3 build.py out        # 提取日文脚本 → 对齐 → 过滤 → 生成 → 校验
+```
+
+输出 `out/EBOOT.elf`、`out/02309.elzma`、`out/02309.size`，拷到 `cantonese_patch\` 后按上面「使用」走。
+`lzenc`（可选，更快）：`gcc -O2 tools/lzenc.c` + LZMA SDK（pylzma 0.6.1 源码 `src/sdk/C`）；没有则用 pylzma。流不能带结束标记、dict 2^14、lc3 lp0 pb2，游戏的解码器不接受带结束标记的流。
 
 ## 引擎笔记（v1.00 EBOOT）
 

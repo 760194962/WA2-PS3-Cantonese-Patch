@@ -8,3 +8,12 @@ out*/
 work/
 __pycache__/
 *.ass
+tools/lzenc
+tools/lzenc.exe
+config.json
+fonts/
+dar_dump/
+ic_ass/
+data.dar*
+WHITE ALBUM2*/
+cantonese_patch/

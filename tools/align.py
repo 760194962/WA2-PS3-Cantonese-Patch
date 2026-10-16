@@ -1,5 +1,6 @@
 import re,sys,collections
-sys.path.insert(0,"/tmp/claude-0/-home-claude/24b8c192-2d1b-5076-95c3-12632b85b8bf/scratchpad/yue")
+import os
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 from scr import *
 import opencc

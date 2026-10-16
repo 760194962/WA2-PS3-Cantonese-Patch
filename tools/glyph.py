@@ -1,6 +1,9 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-FONTFILE="/tmp/claude-0/-home-claude/24b8c192-2d1b-5076-95c3-12632b85b8bf/scratchpad/gensen/repo/otf/TC/GenSenRounded2TC-M.otf"
+import os,sys
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+import paths
+FONTFILE=paths.GENSEN
 def _hk_index():
     for i in range(10):
         try:
@@ -10,7 +13,7 @@ def _hk_index():
     return 0
 HK=0
 BG=(0x55,0x88,0xee)
-YP="/tmp/claude-0/-home-claude/24b8c192-2d1b-5076-95c3-12632b85b8bf/scratchpad/yupearl/YuPearl-1.011/tw/YuPearl-%s.ttf"
+YP=paths.YUPEARL
 import functools
 @functools.lru_cache(None)
 def _cmap(weight):

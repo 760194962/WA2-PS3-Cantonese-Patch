@@ -3,7 +3,8 @@
 Outputs EBOOT.elf (decrypted, patched) + 02309.elzma/02309.size (font atlas for data.dar)."""
 import sys, os, struct, re, subprocess, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE); sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+sys.path.insert(0, HERE)
+import paths
 import numpy as np
 from common import *
 from glyph import render_cell
@@ -16,8 +17,13 @@ elf = bytearray(open(ELF, "rb").read())
 COLS, CELL = 51, 40
 
 # ---------------- elzma (no end marker, like the original tools) ----------------
-LZENC = os.path.join(HERE, "..", "lzsdk", "lzenc")
+LZENC = paths.LZENC
 def lzma_block(raw):
+    # raw LZMA stream WITHOUT end marker (the game's decoder rejects EOS), dict 2^14, lc3 lp0 pb2
+    if not os.path.exists(LZENC):
+        import pylzma   # fallback: pip install pylzma
+        return pylzma.compress(raw, dictionary=14, fastBytes=273, literalContextBits=3,
+                               literalPosBits=0, posBits=2, algorithm=1, eos=0)[5:]
     with tempfile.TemporaryDirectory() as td:
         a, b = os.path.join(td, "i"), os.path.join(td, "o")
         open(a, "wb").write(raw); subprocess.run([LZENC, a, b], check=True)
@@ -42,7 +48,7 @@ for c in tb:
 
 # ---------------- script mapping (full IC from alignment) ----------------
 import pickle
-Gm,TMAP,UNM,DIV=pickle.load(open(os.path.join(HERE,"..","ic_map.pkl"),"rb"))
+Gm,TMAP,UNM,DIV=pickle.load(open(paths.MAP_PKL,"rb"))
 from scr import lines as scr_lines, load as scr_load
 NORM = {"〜": "～", "·": "・", "‧": "・", " ": "　", ",": "，", "!": "！", "?": "？", "(": "（", ")": "）",
         ":": "：", ";": "；", "~": "～", "-": "－", "&": "＆", "/": "／", "'": "’", '"': "”",
@@ -238,7 +244,7 @@ for k in range(struct.unpack(">H", elf[0x3c:0x3e])[0]):
 open(os.path.join(OUT, "EBOOT.elf"), "wb").write(elf)
 
 # ---------------- font atlas (data.dar entry 2309) ----------------
-pk = open(BASE + "dar_dump/02309.bin", "rb").read()
+pk = open(paths.FONT_PKG, "rb").read()
 n = struct.unpack("<I", pk[:4])[0]
 ents = [struct.unpack("<LL", pk[0x10 + 16*i:0x18 + 16*i]) for i in range(n)]
 t0 = bytearray(pk[ents[0][0]:ents[0][0] + ents[0][1]])

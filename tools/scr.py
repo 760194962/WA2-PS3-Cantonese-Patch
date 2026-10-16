@@ -1,5 +1,8 @@
 import re,glob,os,collections
-JP="/tmp/claude-0/-home-claude/24b8c192-2d1b-5076-95c3-12632b85b8bf/scratchpad/work/jp_full/"
+import os,sys
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+import paths
+JP=paths.JP_DIR
 def load(name): return [x.decode("cp932","replace") for x in open(JP+name+".txt","rb").read().split(b",")]
 _spk=None
 def speakers():

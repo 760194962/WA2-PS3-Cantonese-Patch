@@ -1,5 +1,5 @@
 import sys,struct,os
-sys.path.insert(0,"/tmp/claude-0/-home-claude/24b8c192-2d1b-5076-95c3-12632b85b8bf/scratchpad/scripts")
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import wa2_eboot3 as w
 d=sys.argv[1]
 elf=open(d+"/EBOOT.elf","rb").read()

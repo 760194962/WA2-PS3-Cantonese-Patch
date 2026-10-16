@@ -1,6 +1,8 @@
 import pickle,sys,numpy as np,collections,re
-sys.path.insert(0,"/tmp/claude-0/-home-claude/24b8c192-2d1b-5076-95c3-12632b85b8bf/scratchpad/yue")
-G,res=pickle.load(open("ic_align.pkl","rb"))
+import os
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+import paths
+G,res=pickle.load(open(paths.ALIGN_PKL,"rb"))
 cand={}   # g -> (sim, text, file)
 div=[]
 for f,r in res.items():
@@ -28,7 +30,7 @@ print("ep07 concert realigned",fix)
 # second playthrough (other IC branches): align against still-unmapped game lines
 from align import ass_lines, feats, align_fast
 U=[j for j in range(len(G)) if j not in cand]
-A2=[x for x in ass_lines("ass_all/White Album 2 (ic) 2nd run.ass") if not x["style"].startswith(("Prologue","Lyric","Note","Episode"))]
+A2=[x for x in ass_lines(os.path.join(paths.ASS_DIR,"White Album 2 (ic) 2nd run.ass")) if not x["style"].startswith(("Prologue","Lyric","Note","Episode"))]
 pr,S0=align_fast(feats([a["text"] for a in A2],False),feats([G[j][2] for j in U],True),gap=-0.8)
 v=np.array([float(S0[a,g]) if (a is not None and g is not None) else -1.2 for a,g in pr])
 w=np.convolve(v,np.ones(25)/25,mode="same"); add=0
@@ -43,6 +45,6 @@ for g,(s,t,f,a) in cand.items():
 print("mapped",len(cand),"of",len(G),"diverged-rejected",len(div))
 unm=[(j,G[j]) for j in range(len(G)) if j not in cand]
 print("unmapped game lines",len(unm))
-pickle.dump((G,dict(tmap),unm,div),open("ic_map.pkl","wb"))
+pickle.dump((G,dict(tmap),unm,div),open(paths.MAP_PKL,"wb"))
 per=collections.Counter(G[j][0] for j in range(len(G))); pm=collections.Counter(n for n in (G[g][0] for g in cand))
 print({n:(pm[n],per[n]) for n in per})
