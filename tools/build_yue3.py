@@ -60,7 +60,7 @@ def clean(t):
     return "\n".join(ls)
 # translator's "（…）" notes that correspond to ruby (<Rbase|ruby>) in the Japanese script
 RUBY_FIX = [("呢一度（機場）", "<R機場|呢一度>"), ("我哋（欖球部）", "<R欖球部|我哋>"),
-            ("高三辛班（音樂部）", "<R高三辛班|音樂部>")]
+            ("高三辛班（音樂部）", "<R高三辛班|音樂部>"), ("撚(彈)", "<R彈|撚>")]
 plans = []    # (name, fields(bytes), {field_idx: text})
 for name in sorted(TMAP):
     tm = TMAP[name]
