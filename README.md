@@ -23,11 +23,14 @@
 
 ## 使用（Windows）
 
-`windows/` 里的文件放进补丁文件夹 `cantonese_patch\`（与游戏文件夹 `WHITE ALBUM2 [BLJM60571]` 同级），再放入构建出来的 `EBOOT.elf`、`02309.elzma`、`02309.size`。
+`python build.py` 跑完后，成品都在 `output\`（不会改动游戏文件夹），直接复制：
 
-1. `run_undo_patch.bat` → `run_apply_patch.bat`：把新字库追加进 `data.dar`（第 2309 项），并把 `EBOOT.elf` 装成游戏文件夹的 `EBOOT.BIN`（RPCS3 用）。
-2. `make_ps3_eboot.bat`：用 scetool 签成 NPDRM UEXEC（key-revision 01、FREE），输出 `ps3_npdrm_v3\update_patched\EBOOT.BIN`，放到 PS3 的 `/dev_hdd0/game/BLJM60571/USRDIR/`。
-3. EBOOT 和 data.dar 必须是同一次构建，否则字会错位。
+- `output\data.dar` → 光盘位置 `.../PS3_GAME/USRDIR/data.dar`（FTP 用二进制模式，1.9GB）
+- `output\ps3_npdrm_v3\update_patched\EBOOT.BIN` → PS3 的 `/dev_hdd0/game/BLJM60571/USRDIR/`（scetool 签成 NPDRM UEXEC、key-revision 01、FREE；HEN 不接受光盘位置的 EBOOT，会报 80010009）
+- RPCS3：`output\data.dar` 和 `output\rpcs3\EBOOT.BIN` 放进游戏文件夹 `PS3_GAME/USRDIR/`
+- EBOOT 和 data.dar 必须是同一次构建，否则字会错位。
+
+（旧流程 `windows/` 里的 bat 仍可用：放进 `cantonese_patch\`，与构建输出一起运行。现在由 `tools/package.py` 代替。）
 
 ## 构建
 
@@ -42,10 +45,10 @@ fonts/YuPearl-1.011/tw/*.ttf                         俊羽圓體（GenSenRounde
 
 ```
 pip install numba opencc-python-reimplemented fonttools pillow pylzma
-python3 build.py out        # 提取日文脚本 → 对齐 → 过滤 → 生成 → 校验
+python build.py             # 提取日文脚本 → 对齐 → 过滤 → 生成 → 校验 → 打包到 output\
 ```
 
-输出 `out/EBOOT.elf`、`out/02309.elzma`、`out/02309.size`，拷到 `cantonese_patch\` 后按上面「使用」走。
+中间产物在 `work/build/`；打包需要 `data.dar (bak)`（原版 data.dar）和 `cantonese_patch\scetool\scetool.exe`。
 `lzenc`（可选，更快）：`gcc -O2 tools/lzenc.c` + LZMA SDK（pylzma 0.6.1 源码 `src/sdk/C`）；没有则用 pylzma。流不能带结束标记、dict 2^14、lc3 lp0 pb2，游戏的解码器不接受带结束标记的流。
 
 ## 引擎笔记（v1.00 EBOOT）
