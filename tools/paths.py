@@ -40,3 +40,6 @@ ALIGN_PKL = os.path.join(WORK, "ic_align.pkl")
 MAP_PKL = os.path.join(WORK, "ic_map.pkl")
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 LZENC = os.path.join(TOOLS, "lzenc.exe" if os.name == "nt" else "lzenc")
+SCETOOL_DIR = os.path.join(ROOT, "cantonese_patch", "scetool")          # scetool.exe + its data folder
+ORIG_DAR = os.path.join(ROOT, "data.dar (bak)")                          # untouched original data.dar (1,913,230,288 bytes)
+OUTPUT = os.path.join(ROOT, "output")                                    # what you copy to the PS3 / RPCS3

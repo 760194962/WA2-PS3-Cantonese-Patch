@@ -5,6 +5,7 @@ EBOOT.BIN*
 *.elzma
 *.bin
 out*/
+output/
 work/
 __pycache__/
 *.ass

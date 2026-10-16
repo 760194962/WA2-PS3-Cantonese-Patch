@@ -115,6 +115,10 @@ for name, orig, fields, m in plans:
         if i in m: continue
         k = f.decode("cp932", "replace")
         if k in SPEAKER_MAP: m[i] = SPEAKER_MAP[k]
+# lines the Japanese splits over two fields but the subtitle gives as one cue: re-split to follow the Japanese layout
+MANUAL = {"1006": {995: "「嗚！\\n", 996: "你咪等我冇咗件事先嚟提番醒我好冇！」"}}
+for name, orig, fields, m in plans:
+    m.update(MANUAL.get(name, {}))
 plans = [p_ for p_ in plans if p_[3]]
 plans.sort(key=lambda p_: p_[0])
 print("scripts", len(plans), "fields", sum(len(p[3]) for p in plans))
@@ -285,6 +289,7 @@ for i, c in enumerate(tb):
     elif 0x824F <= c <= 0x829A:
         ch = code2char(c)
         if ch and ch.isalnum():
+            ch = chr(ord(ch) - 0xFEE0)       # YuPearl's own full-width Ｕ is a malformed square-bottomed glyph; draw the ASCII letter
             img[r_*CELL:(r_+1)*CELL, c_*CELL:(c_+1)*CELL] = render_cell(ch, size=GLYPH_SIZE + 1, cx=19.5, weight="Medium", maxw=34)
 print("redrawn %d original ideographs, %d new glyphs, atlas height %d" % (nre, len(need), H1))
 t0n = bytearray(t0[:0x80]) + img.astype(">u2").tobytes()
