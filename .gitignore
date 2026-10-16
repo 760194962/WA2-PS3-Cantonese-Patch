@@ -1,0 +1,10 @@
+# game data and builds are never committed
+*.dar
+*.elf
+EBOOT.BIN*
+*.elzma
+*.bin
+out*/
+work/
+__pycache__/
+*.ass
