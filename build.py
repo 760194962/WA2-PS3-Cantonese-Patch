@@ -10,5 +10,6 @@ if not os.path.exists(paths.ALIGN_PKL) or "--realign" in sys.argv: run(os.path.j
 run(os.path.join(T, "make_map.py"))
 run(os.path.join(T, "build_yue3.py"), out)
 run(os.path.join(T, "verify_elf.py"), out)
+if os.path.abspath(out) == os.path.join(paths.WORK, "build"): run(os.path.join(T, "make_index.py"))   # work/index.html
 if "--no-package" not in sys.argv: run(os.path.join(T, "package.py"), out)
 print("done ->", out)

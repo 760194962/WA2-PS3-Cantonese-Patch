@@ -2,11 +2,16 @@
 
 把粤语字幕视频的译文（ic 组 ASS）做进 PS3 版游戏。字体用俊羽圓體（YuPearl），粤字缺字用源泉圓體补。
 
+外传《雪融方恨遲，留待至他朝再次飄雪時》（雪が解け、そして雪が降るまで）的译文采集自 raymondsakura 的公开 YouTube 频道。
+
 本仓库只放工具、脚本和记录。游戏文件（EBOOT、data.dar、日文脚本）、字幕 ASS、字体都不提交。
 
 ## 目前进度
 
-- IC（1001–1013，含二周目分支）：10403 / 10665 行已换成粤文，剩下 262 行是 PS3 改写/追加、两份 ASS 都没有的内容，见 `notes/untranslated_ps3_only.txt`。
+- IC（1001–1013，含二周目分支）：10504 / 10665 行已换成粤文。剩下 161 行见 `notes/untranslated_ps3_only.txt`：62 行是 PS3 新增或改写（PC 版没有），99 行 PC 版也有但字幕视频里没有。
+- 外传「雪が解け、そして雪が降るまで」（脚本 5000–5004，小说模式）：1896 / 1897 段已换成粤文。
+- 字幕漏对的句子：用 PC 版脚本当桥梁找回（`tools/pc_bridge.py`），二周目字幕里的场景和个别句子手工固定（`build_yue3.py` 的 `MANUAL`）。
+- 超过 27 字宽的行在构建时重新断行（先保持原行数，只在标点处断，最多 4 行）。
 - 说话人名字已改粤文写法（对照表在 `tools/build_yue3.py` 的 `SPEAKER_MAP`）。
 - 英文照字幕原样（半角/全角）逐字显示；半角字按各自字宽前进（改了 EBOOT 的绘字代码，对话框和回放记录都已在实机确认）。
 - 注音：日文有 `<R…|…>` 而粤文译文写成括号的 4 处已改回注音（`RUBY_FIX`）。
@@ -15,11 +20,12 @@
 
 ## 还没做
 
-1. 补写 262 行 PS3 独有台词（自己写粤文，需过目）。
-2. 外传「雪が解け、そして雪が降るまで」（ASS: The Snow Melts 01–03 → 脚本 5000 系列）。
+1. 补写 161 行仍是日文的台词（自己写粤文，需过目）；待改译文见 `notes/text_fixes_todo.txt`。
+2. PS3 独有的追加剧情（脚本 4000–4009、5200–5401）和另一篇小说 5100–5104：没有现成字幕。
 3. CC 以后的部分（没有现成字幕）。
 4. 1.01 PKG：`PARAM.SFO` 的 APP_VER 设 01.01 或更高；补丁改用 1.01 的 EBOOT 做（先跑 `decrypt_101.bat`）。
-5. 开场视频（mv01 等）烧录字幕。
+5. 开场视频（mv01 等）烧录字幕；外传菜单标题（贴图）。
+6. PC 版补丁（PS3 版完成后）：`tools/pc_kcap.py` 已能解 PC 的 `script.pak`。
 
 ## 使用（Windows）
 
@@ -45,7 +51,10 @@ fonts/YuPearl-1.011/tw/*.ttf                         俊羽圓體（GenSenRounde
 
 ```
 pip install numba opencc-python-reimplemented fonttools pillow pylzma
-python build.py             # 提取日文脚本 → 对齐 → 过滤 → 生成 → 校验 → 打包到 output\
+python tools/novel_map.py   # 外传：字幕段落 ↔ 小说页（改了字幕或对齐时才需要重跑）
+python tools/pc_kcap.py "WHITE ALBUM2/script.pak" work/pc_jp   # 解 PC 版脚本（一次即可）
+python tools/pc_bridge.py   # 用 PC 版脚本找回漏对的字幕
+python build.py             # 提取日文脚本 → 对齐 → 过滤 → 生成 → 校验 → 索引 → 打包到 output\
 ```
 
 中间产物在 `work/build/`；打包需要 `data.dar (bak)`（原版 data.dar）和 `cantonese_patch\scetool\scetool.exe`。

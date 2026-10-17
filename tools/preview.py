@@ -46,11 +46,22 @@ def main():
             if g is None: lines.append(cur); cur = []
             else: cur.append(g)
         lines.append(cur); lines.append([])             # blank line between fields
-    img = np.zeros((LH * len(lines) + 20, 29 * 30 + 40, 3), np.float32); img[:] = (58, 88, 106)
+    def adv_of(half): return PITCH if half is None else (ADV[half] * PITCH / 28 if PATCHED else PITCH / 2)
+    # the window holds 27 full-width cells; like the engine, char-wrap anything past that (no line-start rules)
+    COLS = int(os.environ.get("PREVIEW_COLS", "27")); LIMIT = COLS * PITCH; wrapped = []   # 27: dialogue box, 40: novel page
+    for ln in lines:
+        cur, x = [], 0
+        for g in ln:
+            if cur and x + adv_of(g[1]) > LIMIT + 0.5: wrapped.append(cur); cur, x = [], 0
+            cur.append(g); x += adv_of(g[1])
+        wrapped.append(cur)
+    lines = wrapped
+    img = np.zeros((LH * len(lines) + 20, PITCH * (COLS + 3) + 40, 3), np.float32); img[:] = (58, 88, 106)
+    img[:, 20 + LIMIT:20 + LIMIT + 2] = (200, 70, 70)    # right edge of the text area
     for ly, ln in enumerate(lines):
         x = 20
         for gi, half in ln:
-            adv = PITCH if half is None else (ADV[half] * PITCH / 28 if PATCHED else PITCH / 2)    # half = the byte of a 1-byte code
+            adv = adv_of(half)                          # half = the byte of a 1-byte code
             if gi is not None:
                 # engine: 40px cell drawn at pen-5 (EBOOT 0x263c), advance = size (2-byte code) or size/2 (1-byte code)
                 cl = cell(gi); x0 = int(round(x - 5)); y0 = 10 + ly * LH

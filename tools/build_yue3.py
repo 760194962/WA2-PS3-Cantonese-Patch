@@ -119,6 +119,8 @@ SPEAKER_MAP = {
     "演劇部員１": "話劇社社員１", "演劇部員２": "話劇社社員２", "演劇部員３": "話劇社社員３",
     "Ａ組担任": "甲班班主任", "男性教師": "男老師", "携帯アナウンス": "電話錄音", "大学生１": "大學生１",
     "大学生２": "大學生２", "教頭": "副校長", "コンビニ店員": "便利店店員", "ウェイトレス": "女侍應",
+    "春希＆かずさ": "春希＆和紗", "かずさ＆春希": "和紗＆春希", "かずさ・雪菜": "和紗・雪菜",
+    "雪菜の母＆孝宏": "雪菜媽媽＆孝宏", "ラジオの天気予報": "電台天氣報告",
 }
 IC_CHAIN = "1001 1002 1003 1004 1005 1006 1007 1008 1008_020 1008_030 1008_031 1008_040 1008_050 1009 1009_020 1009_030 1010 1010_020 1010_030 1010_040 1010_050 1010_060 1010_070 1011 1011_020 1011_030 1012 1012_020 1012_030 1012_030_2 1013".split()
 have = {p_[0] for p_ in plans}
@@ -126,7 +128,15 @@ for name in IC_CHAIN:
     if name not in have:
         orig = open(SCR + name + ".txt", "rb").read()
         plans.append((name, orig, orig.split(b","), {}))
+# side story 「雪が解け、そして雪が降るまで」 (digital novel, scripts 5000-5004): whole pages from tools/novel_map.py
+NOVEL_PKL = os.path.join(paths.WORK, "novel_map.pkl")
+NOVEL = pickle.load(open(NOVEL_PKL, "rb")) if os.path.exists(NOVEL_PKL) and os.environ.get("NO_NOVEL") != "1" else {}
+for name, pages_ in sorted(NOVEL.items()):
+    orig = open(SCR + name + ".txt", "rb").read()
+    plans.append((name, orig, orig.split(b","), dict(pages_)))
+print("novel scripts:", len(NOVEL), "pages:", sum(map(len, NOVEL.values())))
 for name, orig, fields, m in plans:
+    if name in NOVEL: continue
     for i, f in enumerate(fields):
         if i in m: continue
         k = f.decode("cp932", "replace")
@@ -136,16 +146,42 @@ MANUAL = {"1006": {995: "「嗚！\\n", 996: "你咪等我冇咗件事先嚟提�
                    # re-broken by hand: wrapping the subtitle's own breaks would need 5 lines
                    1902: "我本身琴晚已經夠哂崩潰，\\n而且我仲未抖完哂啲矇忪，隻眼好花。\\n不過我唔可以違抗師命，所以我哋好早就出嚟一齊練習，\\n仲早過我哋練第一支歌嗰陣時。"},
           # the automatic alignment misses these (it depends on the t2s converter in use); pin them to the subtitle text
+          # the aligner took the translator's note shown at the same time as the line
+          "1004": {454: "「況且呢…\\n開講都有話『少時不柒頭，長大做妓者』啦係咪先？」"},
           "1010_040": {39: "「噫～～～！」"},
+          # missed by both alignments (few or no kanji to match on); checked against the video by hand
+          "1010_050": {5: "「哎吔！？」", 6: "而我接落嚟就感覺到\\n塊面有一下痛痛地嘅衝擊。"},
+          "1012_030": {660: "「我永遠…都係屬於妳嘅」"},
+          # Io and Setsuna on the eve of graduation: also only in the 2nd-run subtitles
+          "1012_020": {89: "「雪菜呀，真係純粹係你諗多咗㗎咋」", 91: "「真嘅話…都依然係噉有噉傷心啫」",
+                       93: "「而家個年代仲邊有女仔會傻到\\n因為畀人飛而走去咁遠避開人㗎…邊可能痴線到噉㗎？\\n絕對冇可能㗎」",
+                       95: "「唔應該攪成噉㗎………冇理由㗎」"},
+          # Kazusa alone after the hot-spring trip: only in the 2nd-run subtitles, which the alignment missed
+          "1010_060": {5: "「嗚嗄…嗄、嗄嗄、嗄嗄…」", 7: "「終於，返到喇…」", 9: "「哈、哈哈…」",
+                       11: "「嗯哈哈哈…呀哈哈哈…唏！」", 13: "「………」", 15: "「嗄唏！」", 17: "「嗚噫…嗄、嗚嗚…」",
+                       19: "「嗚！嗚呀、呀…嗚呀呀嗄…！\\n呀呀、呀…呀呀呀呀呀嗄！」",
+                       21: "「嗚呀吓呀呀呀呀呀呀呀呀呀呀呀～！\\n唏！咿呀吓吓吓呀呀呀呀呀呀呀呀呀！」",
+                       23: "「呀呀～！嗄…唏！呀吓呀呀呀～！哇呀呀！唏！\\n哇呀吓吓吓呀呀吓吓呀呀吓吓呀呀呀呀～～～！！！」"},
           "1011": {552: "「我合格…？」"},
           "1011_020": {5: "「啲人成日話『10歲就神童，\\n15歲就秀才，一過咗20歲就只係一個普通人』…」"},
           "1012": {225: "嘻嘻！」"}}      # 224 ends with \k\n; the subtitle's closing words belong here
+# lines recovered through the PC script (tools/pc_bridge.py), only where nothing else filled the field
+BRIDGE_PKL = os.path.join(paths.WORK, "pc_bridge.pkl")
+BRIDGE = pickle.load(open(BRIDGE_PKL, "rb")) if os.path.exists(BRIDGE_PKL) else {}
+nb = 0
+for name, orig, fields, m in plans:
+    for i, t in BRIDGE.get(name, {}).items():
+        if i not in m: m[i] = t.replace("\n", "\\n"); nb += 1
+print("PC-bridge lines:", nb)
 for name, orig, fields, m in plans:
     m.update(MANUAL.get(name, {}))
 # The window fits 27 full-width cells per line (the Japanese never goes wider); the engine char-wraps anything longer,
-# which leaves e.g. a lone "，" on the next line. Break over-wide lines after the last punctuation that still fits.
-WRAP = 27
-_BRK = set("，。！？、…）」』》～︰：；")
+# which leaves e.g. a lone "，" on the next line. Re-break such fields: keep the subtitle's line count when the text
+# fits (like the Japanese, a line may then break mid-phrase), otherwise add lines up to MAXL.
+WRAP, MAXL = 27, 4
+_BRK = set("，。！？、…）」』》～︰：；")      # may end a line, must not start one
+_OPEN = set("「『（《")                        # must not end a line
+_PART = set("㗎嘅啦呀喎囉嘞咩喇吖噃嘛啫咋㖞嗎")    # Cantonese sentence-final particles: never start a line
 _UNIT = re.compile(r"<R[^>]*>|<[^>]*>|\\[nk]|.")
 def _uw(u):
     if u.startswith("<R"): return sum(_uw(c) for c in u[2:u.index("|")])
@@ -167,12 +203,49 @@ def _wrap(line):
         out.append("".join(us[:best])); us = us[best:]
     out.append("".join(us))
     return "\\n".join(out)
+def _reflow(t):
+    tail = ""
+    if t.endswith("\\k\\n"): t, tail = t[:-4], "\\k\\n"
+    if "\\k" in t: return None                              # click-waits inside: leave to the per-line fallback
+    us, orig = [], set()
+    for u in _UNIT.findall(t):
+        if u == "\\n": orig.add(len(us))
+        else: us.append(u)
+    N = len(us); wid = [0.0]
+    for u in us: wid.append(wid[-1] + _uw(u))
+    def ok(p, mid):                                        # may a line start at us[p]?
+        a, b = us[p - 1], us[p]
+        if b in _BRK or b in _PART or a in _OPEN: return False
+        if not mid and a not in _BRK: return False
+        return not (len(a) == len(b) == 1 and a.isascii() and b.isascii() and a.isalnum() and b.isalnum())
+    def cost(p): return (0 if us[p - 1] in _BRK else 3) - (1 if p in orig else 0)
+    # fewest lines first (starting from the subtitle's own count); for each, punctuation-only breaks before mid-phrase ones
+    for L, mid in [(L_, m_) for L_ in range(t.count("\\n") + 1, MAXL + 1) for m_ in (False, True)]:
+        dp = {0: (0.0, [])}                                # line start -> (cost, breaks)
+        for _ in range(L - 1):
+            nd = {}
+            for s, (c, br) in dp.items():
+                for p in range(s + 1, N):
+                    if wid[p] - wid[s] > WRAP + 0.01: break
+                    if not ok(p, mid): continue
+                    cc = c + cost(p) + (WRAP - (wid[p] - wid[s])) * 0.01
+                    if p not in nd or cc < nd[p][0]: nd[p] = (cc, br + [p])
+            dp = nd
+        fits = [(c, br) for s, (c, br) in dp.items() if wid[N] - wid[s] <= WRAP + 0.01]
+        if fits:
+            cuts = [0] + min(fits)[1] + [N]
+            return "\\n".join("".join(us[a:b]) for a, b in zip(cuts, cuts[1:])) + tail
+    return None
 WRAPPED = []
 for name, orig, fields, m in plans:
     for i, t in list(m.items()):
-        nt = "\\n".join(_wrap(ln) for ln in t.split("\\n"))
-        if nt != t: m[i] = nt; WRAPPED.append((name, i, nt.count("\\n") + 1))
-print("wrapped over-wide lines in", len(WRAPPED), "fields; now more than 4 lines:", [x[:2] for x in WRAPPED if x[2] > 4])
+        if os.environ.get("NOWRAP") == "1" or name in NOVEL: break   # novel pages are wrapped by the engine
+        if all(sum(map(_uw, _UNIT.findall(ln))) <= WRAP + 0.01 for ln in t.split("\\n")): continue
+        nt = _reflow(t) or "\\n".join(_wrap(ln) for ln in t.split("\\n"))
+        m[i] = nt; WRAPPED.append((name, i, t.count("\\n") + 1, nt.count("\\n") + 1))
+print("re-broke %d over-wide fields: %d kept their line count, %d got more lines; over %d lines: %s" % (
+    len(WRAPPED), sum(a == b for _, _, a, b in WRAPPED), sum(b > a for _, _, a, b in WRAPPED), MAXL,
+    [x[:2] for x in WRAPPED if x[3] > MAXL]))
 plans = [p_ for p_ in plans if p_[3]]
 plans.sort(key=lambda p_: p_[0])
 print("scripts", len(plans), "fields", sum(len(p[3]) for p in plans))
