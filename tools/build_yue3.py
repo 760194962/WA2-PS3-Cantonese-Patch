@@ -64,13 +64,16 @@ LATIN_STRIPS = os.environ.get("LATIN_STRIPS") == "1"    # 1: whole English words
 ASCII_OK = {chr(c >> 8) for c in tb if (c & 0xFF) == 0x20 and 0x30 <= (c >> 8) < 0x7B and chr(c >> 8).isalnum()}
 if not LATIN_STRIPS: ASCII_OK |= {chr(c >> 8) for c in tb if (c & 0xFF) == 0x20 and 0x20 <= (c >> 8) < 0x7F and chr(c >> 8) not in ",<>|\\"}
 PROP = not LATIN_STRIPS     # proportional half-width glyphs: patch the engine's draw routine to use a per-glyph advance table
+# accented Latin letters in the subtitles get a half-width slot the game never uses (no script contains "]" or "#")
+ALIAS = {"ó": "]", "ü": "#"}; ALIAS_DRAW = {v: k for k, v in ALIAS.items()}
 PROP_CELLS = {}; ADV = bytearray([14]) * 256    # advance in atlas px (at the engine's 28px reference), indexed by byte value
 if PROP:
     from glyph import render_prop
     for c_ in tb:
         if (c_ & 0xFF) == 0x20 and 0x20 <= (c_ >> 8) < 0x7F:
-            cell_, adv_ = render_prop(chr(c_ >> 8)); PROP_CELLS[c_] = cell_; ADV[c_ >> 8] = max(1, min(255, int(round(adv_))))
+            cell_, adv_ = render_prop(ALIAS_DRAW.get(chr(c_ >> 8), chr(c_ >> 8))); PROP_CELLS[c_] = cell_; ADV[c_ >> 8] = max(1, min(255, int(round(adv_))))
 def norm_char(ch):
+    ch = ALIAS.get(ch, ch)
     if ch in ASCII_OK: return ch
     ch = NORM.get(ch, ch)
     if "0" <= ch <= "9" or "A" <= ch <= "Z" or "a" <= ch <= "z":
