@@ -276,6 +276,29 @@ if PROP:
     assert CAVE3 + 4 * len(c3) < EMPTY and set(elf[CAVE3:CAVE3 + 4 * len(c3)]) == {0}
     elf[CAVE3:CAVE3 + 4 * len(c3)] = I(*c3)
     elf[0x41480:0x41484] = I((18 << 26) | ((CAVE3 - 0x41480) & 0x03FFFFFC))   # b cave3
+    # backlog renderer (fn 0x43190, per-char call 0x3f060): a twin of the dialogue code with its own stack slots
+    # (index 0x194, size 0x1a4, pen 0x188). Same two spots: 0x45074 (feeds 0x190) and 0x450f0 (the pen).
+    def adv_cave(at, dst, tmp, idx, size, back):
+        c_ = [(32 << 26) | (dst << 21) | (1 << 16) | 0x52C,                  # lwz   dst, 0x52c(r1)   string base
+              (32 << 26) | (tmp << 21) | (1 << 16) | idx,                    # lwz   tmp, idx(r1)     char index
+              (31 << 26) | (dst << 21) | (dst << 16) | (tmp << 11) | (87 << 1),   # lbzx dst, dst, tmp  the byte
+              (15 << 26) | (tmp << 21) | (VA(TBL) >> 16),                    # lis   tmp, hi(tbl)
+              (14 << 26) | (tmp << 21) | (tmp << 16) | (VA(TBL) & 0xFFFF),   # addi  tmp, tmp, lo(tbl)
+              (31 << 26) | (dst << 21) | (tmp << 16) | (dst << 11) | (87 << 1),   # lbzx dst, tmp, dst  advance
+              (32 << 26) | (tmp << 21) | (1 << 16) | size,                   # lwz   tmp, size(r1)
+              (31 << 26) | (dst << 21) | (dst << 16) | (tmp << 11) | (235 << 1),  # mullw dst, dst, tmp
+              (14 << 26) | (dst << 21) | (dst << 16) | 14,                   # addi  dst, dst, 14
+              (14 << 26) | (tmp << 21) | (0 << 16) | 28,                     # li    tmp, 28
+              (31 << 26) | (dst << 21) | (dst << 16) | (tmp << 11) | (491 << 1)]  # divw dst, dst, tmp
+        c_.append((18 << 26) | ((back - (at + 4 * len(c_))) & 0x03FFFFFC))
+        assert at + 4 * len(c_) < EMPTY and set(elf[at:at + 4 * len(c_)]) == {0}
+        elf[at:at + 4 * len(c_)] = I(*c_)
+    assert struct.unpack(">4I", elf[0x45074:0x45084]) == (0x808101A4, 0x30840001, 0x7C840E70, 0x7C840194), "backlog routine differs"
+    assert struct.unpack(">3I", elf[0x450f0:0x450fc]) == (0x806101A4, 0x7C630E70, 0x7C630194), "backlog pen code differs"
+    adv_cave(0x123240, 4, 3, 0x194, 0x1A4, 0x45084)        # r3 is reloaded at 0x45084
+    adv_cave(0x123280, 3, 4, 0x194, 0x1A4, 0x450fc)        # r4 is reloaded at 0x450fc
+    elf[0x45074:0x45078] = I((18 << 26) | ((0x123240 - 0x45074) & 0x03FFFFFC))
+    elf[0x450f0:0x450f4] = I((18 << 26) | ((0x123280 - 0x450f0) & 0x03FFFFFC))
 
 # scripts -> appended as a new PT_LOAD segment (VA 0x1200000)
 NEWVA = 0x1209A00   # first 0x100-aligned address after .bss (ends 0x12099F0)
