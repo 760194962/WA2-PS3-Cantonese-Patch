@@ -1,5 +1,5 @@
 # WHITE ALBUM2 幸せの向こう側（PS3 / BLJM60571）粤文化补丁
-
+PC 版见 [WA2EE-Cantonese-Patch](https://github.com/760194962/WA2EE-Cantonese-Patch)。
 把粤语字幕视频的译文（ic 组 ASS）做进 PS3 版游戏。字体用俊羽圓體（YuPearl），粤字缺字用源泉圓體补。
 
 外传《雪融方恨遲，留待至他朝再次飄雪時》（雪が解け、そして雪が降るまで）的译文采集自 raymondsakura 的公开 YouTube 频道。
