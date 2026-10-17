@@ -21,11 +21,13 @@ def _one(pat):
     if not m: raise SystemExit("missing: " + pat)
     return m[0]
 EBOOT_ORIG = os.path.join(DATA, "WHITE ALBUM2 [BLJM60571]", "PS3_GAME", "USRDIR", "EBOOT.elf")
-if not os.path.exists(EBOOT_ORIG): EBOOT_ORIG = _one(os.path.join(DATA, "*", "PS3_GAME", "USRDIR", "EBOOT.elf"))
+if not os.path.exists(EBOOT_ORIG):                   # the disc EBOOT is optional once the v1.01 one is in place
+    EBOOT_ORIG = (glob.glob(os.path.join(DATA, "*", "PS3_GAME", "USRDIR", "EBOOT.elf")) or [None])[0]
 # the patch is built on the official v1.01 update EBOOT (decrypted with scetool, see windows/decrypt_101.bat) when it is
 # there; WA2_EBOOT=1.00 forces the disc EBOOT. Both carry identical scripts and font tables.
 EBOOT_101 = os.path.join(ROOT, "cantonese_patch", "update_101", "EBOOT_101.elf")
 EBOOT_BASE = EBOOT_ORIG if os.environ.get("WA2_EBOOT") == "1.00" or not os.path.exists(EBOOT_101) else EBOOT_101
+if EBOOT_BASE is None: raise SystemExit("missing: the decrypted EBOOT (" + EBOOT_101 + " or the disc EBOOT.elf)")
 FONT_PKG = os.path.join(DATA, "dar_dump", "02309.bin")
 ASS_DIR = os.path.join(DATA, "ic_ass")
 FONT_DIR = os.path.join(DATA, "fonts")
