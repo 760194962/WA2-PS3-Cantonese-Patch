@@ -132,9 +132,47 @@ for name, orig, fields, m in plans:
         k = f.decode("cp932", "replace")
         if k in SPEAKER_MAP: m[i] = SPEAKER_MAP[k]
 # lines the Japanese splits over two fields but the subtitle gives as one cue: re-split to follow the Japanese layout
-MANUAL = {"1006": {995: "「嗚！\\n", 996: "你咪等我冇咗件事先嚟提番醒我好冇！」"}}
+MANUAL = {"1006": {995: "「嗚！\\n", 996: "你咪等我冇咗件事先嚟提番醒我好冇！」",
+                   # re-broken by hand: wrapping the subtitle's own breaks would need 5 lines
+                   1902: "我本身琴晚已經夠哂崩潰，\\n而且我仲未抖完哂啲矇忪，隻眼好花。\\n不過我唔可以違抗師命，所以我哋好早就出嚟一齊練習，\\n仲早過我哋練第一支歌嗰陣時。"},
+          # the automatic alignment misses these (it depends on the t2s converter in use); pin them to the subtitle text
+          "1010_040": {39: "「噫～～～！」"},
+          "1011": {552: "「我合格…？」"},
+          "1011_020": {5: "「啲人成日話『10歲就神童，\\n15歲就秀才，一過咗20歲就只係一個普通人』…」"},
+          "1012": {225: "嘻嘻！」"}}      # 224 ends with \k\n; the subtitle's closing words belong here
 for name, orig, fields, m in plans:
     m.update(MANUAL.get(name, {}))
+# The window fits 27 full-width cells per line (the Japanese never goes wider); the engine char-wraps anything longer,
+# which leaves e.g. a lone "，" on the next line. Break over-wide lines after the last punctuation that still fits.
+WRAP = 27
+_BRK = set("，。！？、…）」』》～︰：；")
+_UNIT = re.compile(r"<R[^>]*>|<[^>]*>|\\[nk]|.")
+def _uw(u):
+    if u.startswith("<R"): return sum(_uw(c) for c in u[2:u.index("|")])
+    if u.startswith("<") or u.startswith("\\"): return 0
+    if ord(u) < 0x80: return (ADV[ord(u)] / 28) if not LATIN_STRIPS else 0.5
+    return 1
+def _wrap(line):
+    out = []
+    us = _UNIT.findall(line)
+    while sum(map(_uw, us)) > WRAP + 0.01:
+        acc = 0; best = None
+        for k, u in enumerate(us):
+            acc += _uw(u)
+            if acc > WRAP + 0.01: break
+            if u in _BRK and k + 1 < len(us) and acc >= WRAP / 2: best = k + 1
+        if best is None:                                   # no punctuation: hard break, never start a line with punctuation
+            best = k
+            while best > 1 and us[best] in _BRK: best -= 1
+        out.append("".join(us[:best])); us = us[best:]
+    out.append("".join(us))
+    return "\\n".join(out)
+WRAPPED = []
+for name, orig, fields, m in plans:
+    for i, t in list(m.items()):
+        nt = "\\n".join(_wrap(ln) for ln in t.split("\\n"))
+        if nt != t: m[i] = nt; WRAPPED.append((name, i, nt.count("\\n") + 1))
+print("wrapped over-wide lines in", len(WRAPPED), "fields; now more than 4 lines:", [x[:2] for x in WRAPPED if x[2] > 4])
 plans = [p_ for p_ in plans if p_[3]]
 plans.sort(key=lambda p_: p_[0])
 print("scripts", len(plans), "fields", sum(len(p[3]) for p in plans))
