@@ -46,23 +46,22 @@ PS3 版新增或改寫、而字幕冇嘅台詞（約 160 句）仍然係日文�
   - 已解鎖嘅 PS3（HEN 或 CFW），同文件版遊戲（BLJM60571）
   - 官方 1.01 更新（裝好之後 /dev_hdd0/game/BLJM60571/USRDIR/EBOOT.BIN 先會出現）
   - 電腦上有 Python 3（python.org，裝嗰陣勾選 Add to PATH）
-  - scetool（連同佢嘅 data 文件夾），自行準備
 
 步驟：
   1. 將遊戲文件夾入面 PS3_GAME/USRDIR/data.dar 複製到 input 文件夾
   2. 將 PS3 上 /dev_hdd0/game/BLJM60571/USRDIR/EBOOT.BIN（1.01 更新）複製到 input 文件夾
-  3. 將 scetool.exe 同佢嘅 data 文件夾放入 scetool 文件夾
-  4. 雙擊「安裝補丁.bat」
-  5. 將 output 入面兩個文件放返落 PS3：
+  3. 雙擊「安裝補丁.bat」
+  4. 將 output 入面兩個文件放返落 PS3：
      output\\data.dar  放返去遊戲文件夾 PS3_GAME/USRDIR/
      output\\EBOOT.BIN 放返去 /dev_hdd0/game/BLJM60571/USRDIR/
      兩個文件一定要一齊換。
 
 注意：
-  - FTP 傳 data.dar（約 1.9GB）請用二進制模式。
+  - data.dar 約 1.9GB。如果 FTP 工具可以揀傳輸模式，揀「二進制」（大部分工具預設已經係）；傳完可以核對檔案大小。
   - 舊存檔入面嘅回放記錄會顯示亂碼，屬正常；新顯示嘅句子唔受影響。
   - data.dar 係原地打補丁再搬去 output（唔會多佔 1.9GB）；想還原：雙擊「還原data.dar.bat」，會還原並搬返去 input。
   - RPCS3 未測試。
+  - scetool 文件夾入面係 scetool（GPL-3.0，用嚟解密同重新簽名 EBOOT），連同佢運行需要嘅檔案。
 """
 BAT = r"""@echo off
 chcp 65001 >nul
@@ -101,7 +100,13 @@ def main(ver="v0.1"):
     open(os.path.join(kit, "說明.txt"), "w", encoding="utf-8-sig").write(README.format(ver=ver))
     open(os.path.join(kit, "安裝補丁.bat"), "w", encoding="utf-8", newline="\r\n").write(BAT.replace("{args}", ""))
     open(os.path.join(kit, "還原data.dar.bat"), "w", encoding="utf-8", newline="\r\n").write(BAT.replace("{args}", "--undo"))
-    for d, t in (("input", "把 data.dar 同官方 1.01 更新嘅 EBOOT.BIN 放喺呢度。"), ("scetool", "把 scetool.exe 同佢嘅 data 文件夾放喺呢度。"),
+    # scetool and only what it needs to run (its data folder holds the signing keys)
+    for f in ("scetool.exe", "cygwin1.dll", "cygz.dll", "cyggcc_s-1.dll", "gpl-3.0.txt", "readme_scetool.txt"):
+        shutil.copyfile(os.path.join(paths.SCETOOL_DIR, f), os.path.join(kit, "scetool", f))
+    os.makedirs(os.path.join(kit, "scetool", "data"))
+    for f in ("keys", "ldr_curves", "vsh_curves", "npdrm-const", "rif-key"):
+        shutil.copyfile(os.path.join(paths.SCETOOL_DIR, "data", f), os.path.join(kit, "scetool", "data", f))
+    for d, t in (("input", "把 data.dar 同官方 1.01 更新嘅 EBOOT.BIN 放喺呢度。"),
                  ("output", "打好補丁嘅 data.dar 同 EBOOT.BIN 會喺呢度。")):
         open(os.path.join(kit, d, "放喺呢度.txt"), "w", encoding="utf-8-sig").write(t + "\n")
     z = kit + ".zip"
