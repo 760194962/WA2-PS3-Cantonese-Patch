@@ -38,6 +38,10 @@ for _b in range(_a, len(_src)):                       # end of the dict literal:
     _d += {"{": 1, "}": -1}.get(_src[_b], 0)
     if _d == 0: break
 MANUAL = eval(_src[_a:_b + 1])
+TODO = set()                         # notes/text_fixes_todo.txt: lines "script<TAB>field<TAB>..."
+for _l in open(os.path.join(paths.ROOT, "notes", "text_fixes_todo.txt"), encoding="utf-8"):
+    _p = _l.split("	")
+    if len(_p) >= 2 and _p[1].strip().isdigit() and not _l.startswith("#"): TODO.add((_p[0], int(_p[1])))
 _bp = os.path.join(paths.WORK, "pc_bridge.pkl")
 BRIDGE = pickle.load(open(_bp, "rb")) if os.path.exists(_bp) else {}
 G, res = pickle.load(open(paths.ALIGN_PKL, "rb"))
@@ -60,6 +64,7 @@ for gi, (n, i, t) in enumerate(G):
     if i in MANUAL.get(n, {}): flags.append("fix")              # hand-fixed in build_yue3.MANUAL
     elif i in BRIDGE.get(n, {}): flags.append("pc")             # recovered through the PC script
     elif sub is not None and breaks(yy) != breaks(sub): flags.append("wrap")
+    if (n, i) in TODO: flags.append("todo")
     spk = ""
     prev = JPC[n][i - 1] if i else ""
     if 0 < len(prev) <= 12 and t.startswith(("「", "（", "『")) and not prev.startswith(("「", "（", "『", "<")):
@@ -112,8 +117,8 @@ h1{font-size:17px;margin:0 0 8px}input{width:100%;padding:10px 12px;font-size:16
 <div class="tabs" id="tabs"></div></header><main id="out"></main>
 <script>
 const R=__DATA__;
-const TABS=[["s","搜索"],["wrap","重新断行"],["fix","手动修正"],["pc","PC版找回"],["en","含英文"],["name","合称人名"],["jp","仍是日文"],["head","外传章节开头"]];
-const LBL={pc:"PC桥接",wrap:"重新断行",fix:"手动修正",en:"英文",name:"人名",jp:"日文",head:"章节"};
+const TABS=[["s","搜索"],["todo","待修改"],["wrap","重新断行"],["fix","手动修正"],["pc","PC版找回"],["en","含英文"],["name","合称人名"],["jp","仍是日文"],["head","外传章节开头"]];
+const LBL={todo:"待修改",pc:"PC桥接",wrap:"重新断行",fix:"手动修正",en:"英文",name:"人名",jp:"日文",head:"章节"};
 let tab="s";const $=s=>document.querySelector(s);
 $("#tabs").innerHTML=TABS.map(t=>`<button data-t="${t[0]}">${t[1]}</button>`).join("");
 document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;draw()});
