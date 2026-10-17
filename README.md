@@ -38,6 +38,13 @@
 
 （旧流程 `windows/` 里的 bat 仍可用：放进 `cantonese_patch\`，与构建输出一起运行。现在由 `tools/package.py` 代替。）
 
+## 发布包
+
+`python tools/make_release.py v0.1` 生成 `output/release/WA2_PS3_Cantonese_v0.1.zip`（约 2.3MB），不含任何游戏文件：
+字库是 `data.dar` 第 2309 项的压缩包，EBOOT 是对官方 1.01 更新 EBOOT（解密后）的差异文件（`EBOOT.wa2d`）。
+用家把自己的 `data.dar`、1.01 的 `EBOOT.BIN` 放进 `input\`，scetool 放进 `scetool\`，双击「安裝補丁.bat」，
+补丁程序（`tools/release/apply.py`，只用 Python 标准库）会校验版本、解密、套用差异、签名，并给 `data.dar` 打补丁（可还原）。
+
 ## 构建
 
 仓库文件夹本身就是素材文件夹（`tools/paths.py` 默认 DATA=仓库根目录；也可设环境变量 `WA2_DATA` 或写 `config.json` `{"data_dir": "..."}`）。需要这些（都不提交）：
