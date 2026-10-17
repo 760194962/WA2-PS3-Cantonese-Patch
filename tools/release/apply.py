@@ -95,14 +95,22 @@ def patch_eboot(path):
         shutil.rmtree(tmp, ignore_errors=True)
 
 def main():
-    dar, eb = os.path.join(INP, "data.dar"), os.path.join(INP, "EBOOT.BIN")
-    if "--undo" in sys.argv: undo_dar(dar); return
+    dar, eb, done = os.path.join(INP, "data.dar"), os.path.join(INP, "EBOOT.BIN"), os.path.join(OUT, "data.dar")
+    if "--undo" in sys.argv:                # restore the patched copy (in output\) and move it back to input\
+        if not os.path.exists(done + ".undo.json"): done = dar
+        undo_dar(done)
+        if done != dar: os.replace(done, dar)
+        return
+    if not os.path.exists(dar) and os.path.exists(done): os.replace(done, dar)       # patching again
+    if os.path.exists(done + ".undo.json") and not os.path.exists(dar + ".undo.json"): os.replace(done + ".undo.json", dar + ".undo.json")
     if not os.path.exists(dar): die("請將遊戲嘅 data.dar 放入 input 文件夾")
     if not os.path.exists(eb): die("請將官方 1.01 更新嘅 EBOOT.BIN 放入 input 文件夾")
     patch_eboot(eb)                       # EBOOT first: it checks the version before data.dar is touched
     patch_dar(dar)
-    print("\n完成。將文件放返落 PS3：")
-    print("  input\\data.dar     ->  遊戲文件夾  PS3_GAME/USRDIR/data.dar")
+    os.makedirs(OUT, exist_ok=True)       # patched in place (no 1.9 GB copy), then moved next to the EBOOT
+    os.replace(dar, done); os.replace(dar + ".undo.json", done + ".undo.json")
+    print("\n完成。將 output 入面兩個文件放返落 PS3：")
+    print("  output\\data.dar    ->  遊戲文件夾  PS3_GAME/USRDIR/data.dar")
     print("  output\\EBOOT.BIN   ->  /dev_hdd0/game/BLJM60571/USRDIR/EBOOT.BIN")
     print("兩個文件一定要一齊換。")
 

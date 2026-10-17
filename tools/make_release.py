@@ -53,14 +53,15 @@ PS3 版新增或改寫、而字幕冇嘅台詞（約 160 句）仍然係日文�
   2. 將 PS3 上 /dev_hdd0/game/BLJM60571/USRDIR/EBOOT.BIN（1.01 更新）複製到 input 文件夾
   3. 將 scetool.exe 同佢嘅 data 文件夾放入 scetool 文件夾
   4. 雙擊「安裝補丁.bat」
-  5. 將 input\\data.dar 放返去遊戲文件夾 PS3_GAME/USRDIR/
-     將 output\\EBOOT.BIN 放返去 /dev_hdd0/game/BLJM60571/USRDIR/
+  5. 將 output 入面兩個文件放返落 PS3：
+     output\\data.dar  放返去遊戲文件夾 PS3_GAME/USRDIR/
+     output\\EBOOT.BIN 放返去 /dev_hdd0/game/BLJM60571/USRDIR/
      兩個文件一定要一齊換。
 
 注意：
   - FTP 傳 data.dar（約 1.9GB）請用二進制模式。
   - 舊存檔入面嘅回放記錄會顯示亂碼，屬正常；新顯示嘅句子唔受影響。
-  - 想還原 data.dar：雙擊「還原data.dar.bat」。
+  - data.dar 係原地打補丁再搬去 output（唔會多佔 1.9GB）；想還原：雙擊「還原data.dar.bat」，會還原並搬返去 input。
   - RPCS3 未測試。
 """
 BAT = r"""@echo off
@@ -101,7 +102,7 @@ def main(ver="v0.1"):
     open(os.path.join(kit, "安裝補丁.bat"), "w", encoding="utf-8", newline="\r\n").write(BAT.replace("{args}", ""))
     open(os.path.join(kit, "還原data.dar.bat"), "w", encoding="utf-8", newline="\r\n").write(BAT.replace("{args}", "--undo"))
     for d, t in (("input", "把 data.dar 同官方 1.01 更新嘅 EBOOT.BIN 放喺呢度。"), ("scetool", "把 scetool.exe 同佢嘅 data 文件夾放喺呢度。"),
-                 ("output", "生成嘅 EBOOT.BIN 會喺呢度。")):
+                 ("output", "打好補丁嘅 data.dar 同 EBOOT.BIN 會喺呢度。")):
         open(os.path.join(kit, d, "放喺呢度.txt"), "w", encoding="utf-8-sig").write(t + "\n")
     z = kit + ".zip"
     with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
