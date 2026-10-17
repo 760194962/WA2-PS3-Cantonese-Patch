@@ -9,7 +9,7 @@ from PIL import Image
 import paths, wa2_eboot3 as w
 B = os.path.join(paths.WORK, os.environ.get("PREVIEW_BUILD", "build"))
 elf = open(os.path.join(B, "EBOOT.elf"), "rb").read()
-N = struct.unpack(">H", elf[0xC98A:0xC98C])[0]
+N = struct.unpack(">H", elf[0xCA2A:0xCA2C] if elf[0xCA28:0xCA2A] == b"8`" else elf[0xC98A:0xC98C])[0]   # glyph count (v1.01 / v1.00)
 arr = struct.unpack(">%dH" % N, elf[0x120E00:0x120E00 + 2 * N])
 idx = {c: i for i, c in enumerate(arr)}
 pk = w.elzma_decompress(open(os.path.join(B, "02309.elzma"), "rb").read(), int(open(os.path.join(B, "02309.size")).read()))

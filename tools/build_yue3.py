@@ -308,8 +308,19 @@ def enc(t):
     return bytes(out)
 
 # ---------------- EBOOT layout in the zero padding after segment 0 ----------------
+# addresses that differ between the v1.00 (disc) and v1.01 (official update) EBOOT; everything else is shared
+EBOOTS = {
+    "1.00": dict(seg0=0x120DE8, cnt=0xC988, arr=0xC9F0, empty=0xCA04, tblva=0x10E3F0, draw=0x274c, draw_ret=0x2768,
+                 dlg=0x41404, dlg_ret=0x41414, dlg_pen=0x41480, dlg_pen_ret=0x4148c, dlg_base=0x52C,
+                 log=0x45074, log_ret=0x45084, log_pen=0x450f0, log_pen_ret=0x450fc, seg1=(0x130000, 0x140000, 0x5717dc, 0x10c99f0)),
+    "1.01": dict(seg0=0x120CE8, cnt=0xCA28, arr=0xCA90, empty=0xCAA4, tblva=0x10EDF0, draw=0x27ac, draw_ret=0x27c8,
+                 dlg=0x41518, dlg_ret=0x41528, dlg_pen=0x41594, dlg_pen_ret=0x415a0, dlg_base=0x53C,
+                 log=0x450fc, log_ret=0x4510c, log_pen=0x45178, log_pen_ret=0x45184, seg1=(0x130000, 0x140000, 0x59a3dc, 0x10f25f0)),
+}
+VER = next(v for v, a in EBOOTS.items() if struct.unpack(">I", elf[a["cnt"]:a["cnt"] + 4])[0] == 0x38600A92)
+EB = EBOOTS[VER]; print("EBOOT version", VER)
 ARR, EMPTY, RES, END = 0x120E00, 0x124000, 0x124100, 0x12F000
-assert set(elf[0x120DE8:0x130000]) == {0}
+assert set(elf[EB["seg0"]:0x130000]) == {0}
 codes = tb + [new_code[c] for c in need] + [c for c, _ in STRIP_CELLS]
 NEW_N = len(codes)
 assert NEW_N * 2 < EMPTY - ARR
@@ -321,22 +332,23 @@ if MODE == "static2706": codes = tb; NEW_N = TBL_N
 if MODE != "plain":
     elf[ARR:ARR + NEW_N * 2] = b"".join(struct.pack(">H", expand(c)) for c in codes)
     # glyph count
-    assert struct.unpack(">I", elf[0xC988:0xC98C])[0] == 0x38600A92
-    elf[0xC98A:0xC98C] = struct.pack(">H", NEW_N)
+    elf[EB["cnt"] + 2:EB["cnt"] + 4] = struct.pack(">H", NEW_N)
     # use the static pre-expanded array instead of malloc+fill
-    assert elf[0xC9F0] >> 2 == 0x12 and struct.unpack(">I", elf[0xC9F4:0xC9F8])[0] == 0x60000000
+    A_ = EB["arr"]
+    assert elf[A_] >> 2 == 0x12 and struct.unpack(">I", elf[A_ + 4:A_ + 8])[0] == 0x60000000
     av = ARR + 0x10000
-    elf[0xC9F0:0xC9F8] = struct.pack(">II", 0x3C600000 | (av >> 16), 0x60630000 | (av & 0xFFFF))
-    assert elf[0xCA04:0xCA0C] == bytes.fromhex("3C6000113063E3F0")
+    elf[A_:A_ + 8] = struct.pack(">II", 0x3C600000 | (av >> 16), 0x60630000 | (av & 0xFFFF))
+    E_ = EB["empty"]
+    assert elf[E_:E_ + 8] == struct.pack(">II", 0x3C600000 | (EB["tblva"] + 0x8000 >> 16), 0x30630000 | (EB["tblva"] & 0xFFFF))
     ev_ = EMPTY + 0x10000; assert ev_ & 0x8000 == 0
-    elf[0xCA04:0xCA0C] = struct.pack(">II", 0x3C600000 | (ev_ >> 16), 0x30630000 | (ev_ & 0xFFFF))
+    elf[E_:E_ + 8] = struct.pack(">II", 0x3C600000 | (ev_ >> 16), 0x30630000 | (ev_ & 0xFFFF))
 
 # ---- proportional 1-byte glyphs: the draw routine (0x263c) advances size/2 for a 1-byte code; replace that with
 #      size * ADV[byte] / 28 (ADV = glyph advance in atlas px). Table + trampoline live in the padding after the code array.
 if PROP:
     TBL, CAVE = 0x123000, 0x123100
     assert NEW_N * 2 + ARR < TBL and set(elf[TBL:CAVE + 0x40]) == {0}
-    assert struct.unpack(">II", elf[0x274c:0x2754]) == (0x7FF60E70, 0x7ED60194), "draw routine differs"   # srawi r22,r31,1 ; addze r22,r22
+    assert struct.unpack(">II", elf[EB["draw"]:EB["draw"] + 8]) == (0x7FF60E70, 0x7ED60194), "draw routine differs"   # srawi r22,r31,1 ; addze r22,r22
     def I(*w): return b"".join(struct.pack(">I", x) for x in w)
     VA = lambda o: o + 0x10000
     elf[TBL:TBL + 256] = bytes(ADV)
@@ -348,15 +360,15 @@ if PROP:
             (14 << 26) | (0 << 21) | (0 << 16) | 28,                       # li     r0, 28
             (31 << 26) | (22 << 21) | (22 << 16) | (0 << 11) | (491 << 1)] # divw   r22, r22, r0
     assert VA(TBL) & 0x8000 == 0
-    back = 0x2768 - (CAVE + 4 * len(cave))
+    back = EB["draw_ret"] - (CAVE + 4 * len(cave))
     cave.append((18 << 26) | (back & 0x03FFFFFC))                         # b      0x2768
     elf[CAVE:CAVE + 4 * len(cave)] = I(*cave)
-    elf[0x274c:0x2750] = I((18 << 26) | ((CAVE - 0x274c) & 0x03FFFFFC))  # b      cave
+    elf[EB["draw"]:EB["draw"] + 4] = I((18 << 26) | ((CAVE - EB["draw"]) & 0x03FFFFFC))  # b      cave
     # dialogue / message-window renderer: after the per-char call (0x41400) the pen moves by (size+1)>>1 for a 1-byte code
     # (0x41404..0x41410, result in r4). Same table, byte = base[idx] (stack slots 0x52c / 0x190), size = 0x1a0(r1).
     CAVE2 = 0x123180
-    assert struct.unpack(">4I", elf[0x41404:0x41414]) == (0x808101A0, 0x30840001, 0x7C840E70, 0x7C840194), "dialogue routine differs"
-    c2 = [(32 << 26) | (3 << 21) | (1 << 16) | 0x52C,                       # lwz   r3, 0x52c(r1)    string base
+    assert struct.unpack(">4I", elf[EB["dlg"]:EB["dlg"] + 16]) == (0x808101A0, 0x30840001, 0x7C840E70, 0x7C840194), "dialogue routine differs"
+    c2 = [(32 << 26) | (3 << 21) | (1 << 16) | EB["dlg_base"],                       # lwz   r3, 0x52c(r1)    string base
           (32 << 26) | (4 << 21) | (1 << 16) | 0x190,                       # lwz   r4, 0x190(r1)    char index
           (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (87 << 1),       # lbzx  r3, r3, r4       the byte
           (15 << 26) | (4 << 21) | (VA(TBL) >> 16),                         # lis   r4, hi(tbl)
@@ -367,15 +379,15 @@ if PROP:
           (14 << 26) | (3 << 21) | (3 << 16) | 14,                          # addi  r3, r3, 14
           (14 << 26) | (0 << 21) | (0 << 16) | 28,                          # li    r0, 28
           (31 << 26) | (4 << 21) | (3 << 16) | (0 << 11) | (491 << 1)]      # divw  r4, r3, r0
-    c2.append((18 << 26) | ((0x41414 - (CAVE2 + 4 * len(c2))) & 0x03FFFFFC))   # b 0x41414
+    c2.append((18 << 26) | ((EB["dlg_ret"] - (CAVE2 + 4 * len(c2))) & 0x03FFFFFC))   # b 0x41414
     assert set(elf[CAVE2:CAVE2 + 4 * len(c2)]) == {0}
     elf[CAVE2:CAVE2 + 4 * len(c2)] = I(*c2)
-    elf[0x41404:0x41408] = I((18 << 26) | ((CAVE2 - 0x41404) & 0x03FFFFFC))   # b cave2
+    elf[EB["dlg"]:EB["dlg"] + 4] = I((18 << 26) | ((CAVE2 - EB["dlg"]) & 0x03FFFFFC))   # b cave2
     # ...but 0x41404 only feeds 0x18c(r1). The pen itself (0x184) moves at 0x41480..0x414ac:
     #   pen += (size >> 1) + (spacing 0x4fc >> 1)        -> replace size>>1 (0x41480..0x41488, result in r3)
     CAVE3 = 0x123200
-    assert struct.unpack(">3I", elf[0x41480:0x4148c]) == (0x806101A0, 0x7C630E70, 0x7C630194), "dialogue pen code differs"
-    c3 = [(32 << 26) | (3 << 21) | (1 << 16) | 0x52C,                       # lwz   r3, 0x52c(r1)    string base
+    assert struct.unpack(">3I", elf[EB["dlg_pen"]:EB["dlg_pen"] + 12]) == (0x806101A0, 0x7C630E70, 0x7C630194), "dialogue pen code differs"
+    c3 = [(32 << 26) | (3 << 21) | (1 << 16) | EB["dlg_base"],                       # lwz   r3, 0x52c(r1)    string base
           (32 << 26) | (4 << 21) | (1 << 16) | 0x190,                       # lwz   r4, 0x190(r1)    char index
           (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (87 << 1),       # lbzx  r3, r3, r4       the byte
           (15 << 26) | (4 << 21) | (VA(TBL) >> 16),                         # lis   r4, hi(tbl)
@@ -386,10 +398,10 @@ if PROP:
           (14 << 26) | (3 << 21) | (3 << 16) | 14,                          # addi  r3, r3, 14
           (14 << 26) | (4 << 21) | (0 << 16) | 28,                          # li    r4, 28           (r4 is reloaded at 0x4148c)
           (31 << 26) | (3 << 21) | (3 << 16) | (4 << 11) | (491 << 1)]      # divw  r3, r3, r4
-    c3.append((18 << 26) | ((0x4148c - (CAVE3 + 4 * len(c3))) & 0x03FFFFFC))   # b 0x4148c
+    c3.append((18 << 26) | ((EB["dlg_pen_ret"] - (CAVE3 + 4 * len(c3))) & 0x03FFFFFC))   # b 0x4148c
     assert CAVE3 + 4 * len(c3) < EMPTY and set(elf[CAVE3:CAVE3 + 4 * len(c3)]) == {0}
     elf[CAVE3:CAVE3 + 4 * len(c3)] = I(*c3)
-    elf[0x41480:0x41484] = I((18 << 26) | ((CAVE3 - 0x41480) & 0x03FFFFFC))   # b cave3
+    elf[EB["dlg_pen"]:EB["dlg_pen"] + 4] = I((18 << 26) | ((CAVE3 - EB["dlg_pen"]) & 0x03FFFFFC))   # b cave3
     # backlog renderer (fn 0x43190, per-char call 0x3f060): a twin of the dialogue code with its own stack slots
     # (index 0x194, size 0x1a4, pen 0x188). Same two spots: 0x45074 (feeds 0x190) and 0x450f0 (the pen).
     def adv_cave(at, dst, tmp, idx, size, back):
@@ -407,15 +419,15 @@ if PROP:
         c_.append((18 << 26) | ((back - (at + 4 * len(c_))) & 0x03FFFFFC))
         assert at + 4 * len(c_) < EMPTY and set(elf[at:at + 4 * len(c_)]) == {0}
         elf[at:at + 4 * len(c_)] = I(*c_)
-    assert struct.unpack(">4I", elf[0x45074:0x45084]) == (0x808101A4, 0x30840001, 0x7C840E70, 0x7C840194), "backlog routine differs"
-    assert struct.unpack(">3I", elf[0x450f0:0x450fc]) == (0x806101A4, 0x7C630E70, 0x7C630194), "backlog pen code differs"
-    adv_cave(0x123240, 4, 3, 0x194, 0x1A4, 0x45084)        # r3 is reloaded at 0x45084
-    adv_cave(0x123280, 3, 4, 0x194, 0x1A4, 0x450fc)        # r4 is reloaded at 0x450fc
-    elf[0x45074:0x45078] = I((18 << 26) | ((0x123240 - 0x45074) & 0x03FFFFFC))
-    elf[0x450f0:0x450f4] = I((18 << 26) | ((0x123280 - 0x450f0) & 0x03FFFFFC))
+    assert struct.unpack(">4I", elf[EB["log"]:EB["log"] + 16]) == (0x808101A4, 0x30840001, 0x7C840E70, 0x7C840194), "backlog routine differs"
+    assert struct.unpack(">3I", elf[EB["log_pen"]:EB["log_pen"] + 12]) == (0x806101A4, 0x7C630E70, 0x7C630194), "backlog pen code differs"
+    adv_cave(0x123240, 4, 3, 0x194, 0x1A4, EB["log_ret"])        # r3 is reloaded at 0x45084
+    adv_cave(0x123280, 3, 4, 0x194, 0x1A4, EB["log_pen_ret"])        # r4 is reloaded at 0x450fc
+    elf[EB["log"]:EB["log"] + 4] = I((18 << 26) | ((0x123240 - EB["log"]) & 0x03FFFFFC))
+    elf[EB["log_pen"]:EB["log_pen"] + 4] = I((18 << 26) | ((0x123280 - EB["log_pen"]) & 0x03FFFFFC))
 
 # scripts -> appended as a new PT_LOAD segment (VA 0x1200000)
-NEWVA = 0x1209A00   # first 0x100-aligned address after .bss (ends 0x12099F0)
+NEWVA = (EB["seg1"][1] + EB["seg1"][3] + 0xFF) & ~0xFF   # first 0x100-aligned address after .bss
 entries = {e[1]: e for e in w.entries(bytes(elf))}
 blob = bytearray()
 for name, orig, fields, m in plans:
@@ -433,14 +445,14 @@ for name, orig, fields, m in plans:
     print("%s.txt: %d -> %d bytes (orig %d)" % (name, len(newtxt), len(comp), len(orig)))
 print("script blob %d bytes" % len(blob))
 # segment 0 only needs to cover the static glyph tables
-assert struct.unpack(">I", elf[0x64:0x68])[0] == 0x120DE8
+assert struct.unpack(">I", elf[0x64:0x68])[0] == EB["seg0"]
 SEG0 = 0x124100
 elf[0x64:0x68] = struct.pack(">I", SEG0); elf[0x6C:0x70] = struct.pack(">I", SEG0)
 # extend the data segment (#1) past the end of .bss and put the scripts there:
 # PS3 lv2 refused an extra PT_LOAD (80010001), so keep the original 2-segment layout.
 ph1 = 0x40 + 1 * 56
 t_, fl_, off1, va1, pa_, fs1, ms1, al_ = struct.unpack(">IIQQQQQQ", elf[ph1:ph1 + 56])
-assert (off1, va1, fs1, ms1) == (0x130000, 0x140000, 0x5717dc, 0x10c99f0)
+assert (off1, va1, fs1, ms1) == EB["seg1"]
 SEGEND = off1 + fs1                      # 0x6a17dc: non-loaded sections + shdrs follow
 tail = bytes(elf[SEGEND:])
 blob_off = off1 + (NEWVA - va1)

@@ -2,9 +2,11 @@ import re,struct,glob
 import os,sys
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import paths
-ELF=paths.EBOOT_ORIG
+ELF=paths.EBOOT_BASE
 SCR=paths.JP_DIR
-TBL_OFF=0xFE3F0; TBL_N=2706
+TBL_N=2706
+with open(ELF,"rb") as _f: _e=_f.read(0xCA2C)
+TBL_OFF=0xFEDF0 if _e[0xCA28:0xCA2C]==bytes.fromhex("38600A92") else 0xFE3F0     # font table: v1.01 / v1.00
 def font_table(elf):
     out=[]
     for i in range(TBL_N):

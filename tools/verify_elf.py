@@ -7,7 +7,7 @@ ph=[struct.unpack(">IIQQQQQQ",elf[0x40+i*56:0x40+i*56+56]) for i in range(8)]
 def va2off(va):
     for t,fl,off,vaa,pa,fs,ms,al in ph:
         if t==1 and fs and vaa<=va<vaa+fs: return va-vaa+off
-pos=0x106edc; bad=n=0
+pos=w.find_table_start(elf); bad=n=0
 while True:
     no,do,us,bs=struct.unpack(">4I",elf[pos:pos+16])
     if no==0: break
