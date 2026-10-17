@@ -53,6 +53,43 @@ for (n, fi, si), k in gidx.items():
     new[n][fi][si] = m_.group(1) + m_.group(2) + txt + m_.group(4)
 out = {n: {fi: (BS + "k").join(parts) for fi, parts in d.items()} for n, d in new.items()}
 out = {n: {fi: t for fi, t in d.items() if t != FIELDS[n][fi]} for n, d in out.items()}
+# The engine char-wraps novel pages at 40 full-width cells with no line-start rules, so a "，" can open a line.
+# Simulate the wrap and, where the next line would start with closing punctuation, break one character earlier.
+# (Only on lines without half-width text: how the engine measures those is not exactly known.)
+CLOSE = set("，。、！？」』）》…：；～")
+def kinsoku(par):
+    out, line = [], []
+    w = lambda ch: 0.5 if ord(ch) < 0x80 else 1
+    for ch in par:
+        if sum(map(w, line)) + w(ch) > 40:
+            if ch in CLOSE and len(line) > 1 and all(ord(c) >= 0x80 for c in line):
+                out.append("".join(line[:-1])); line = [line[-1]]
+            else:
+                out.append("".join(line)); line = []
+        line.append(ch)
+    out.append("".join(line))
+    return out
+KINSOKU = 0
+for n, d in out.items():
+    for fi, t in d.items():
+        parts = t.split(BS + "k")
+        for si, part in enumerate(parts):
+            m_ = SEG.match(part)
+            if BS in m_.group(3) or "<" in m_.group(3): continue
+            body = m_.group(2) + m_.group(3)
+            lines = kinsoku(body)
+            natural = kinsoku_plain = None
+            if len(lines) > 1:
+                # only add a manual break where it differs from the engine's own wrap
+                eng, cur = [], ""
+                for ch in body:
+                    if cur and sum(0.5 if ord(c) < 0x80 else 1 for c in cur + ch) > 40: eng.append(cur); cur = ""
+                    cur += ch
+                eng.append(cur)
+                if lines != eng:
+                    parts[si] = m_.group(1) + (BS + "n").join(lines) + m_.group(4); KINSOKU += 1
+        d[fi] = (BS + "k").join(parts)
+print("novel lines re-broken to keep punctuation off a line start:", KINSOKU)
 # the engine char-wraps novel pages at ~40 cells (half-width = 0.5); break before the one English word it would split
 for n, fi, a, b in [("5000", 10, "松川自high", "松川自" + BS + "nhigh")]:
     assert a in out[n][fi]; out[n][fi] = out[n][fi].replace(a, b)
