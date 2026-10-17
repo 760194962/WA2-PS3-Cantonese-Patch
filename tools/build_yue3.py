@@ -178,6 +178,9 @@ for name, orig, fields, m in plans:
 print("PC-bridge lines:", nb)
 for name, orig, fields, m in plans:
     m.update(MANUAL.get(name, {}))
+    if os.environ.get("EXTRA_MANUAL"):      # experiments: {"script": {"field": "text"}} from a JSON file
+        import json
+        m.update({int(k): v for k, v in json.load(open(os.environ["EXTRA_MANUAL"], encoding="utf-8")).get(name, {}).items()})
 # The window fits 27 full-width cells per line (the Japanese never goes wider); the engine char-wraps anything longer,
 # which leaves e.g. a lone "，" on the next line. Re-break such fields: keep the subtitle's line count when the text
 # fits (like the Japanese, a line may then break mid-phrase), otherwise add lines up to MAXL.
@@ -315,7 +318,8 @@ EBOOTS = {
                  log=0x45074, log_ret=0x45084, log_pen=0x450f0, log_pen_ret=0x450fc, seg1=(0x130000, 0x140000, 0x5717dc, 0x10c99f0)),
     "1.01": dict(seg0=0x120CE8, cnt=0xCA28, arr=0xCA90, empty=0xCAA4, tblva=0x10EDF0, draw=0x27ac, draw_ret=0x27c8,
                  dlg=0x41518, dlg_ret=0x41528, dlg_pen=0x41594, dlg_pen_ret=0x415a0, dlg_base=0x53C,
-                 log=0x450fc, log_ret=0x4510c, log_pen=0x45178, log_pen_ret=0x45184, seg1=(0x130000, 0x140000, 0x59a3dc, 0x10f25f0)),
+                 log=0x450fc, log_ret=0x4510c, log_pen=0x45178, log_pen_ret=0x45184, seg1=(0x130000, 0x140000, 0x59a3dc, 0x10f25f0),
+                 ruby_cnt=0xCA10, ruby_arr=0xCB8C, ruby_src=0xCBA0, ruby_str=0x100315),
 }
 VER = next(v for v, a in EBOOTS.items() if struct.unpack(">I", elf[a["cnt"]:a["cnt"] + 4])[0] == 0x38600A92)
 EB = EBOOTS[VER]; print("EBOOT version", VER)
@@ -426,6 +430,39 @@ if PROP:
     elf[EB["log"]:EB["log"] + 4] = I((18 << 26) | ((0x123240 - EB["log"]) & 0x03FFFFFC))
     elf[EB["log_pen"]:EB["log_pen"] + 4] = I((18 << 26) | ((0x123280 - EB["log_pen"]) & 0x03FFFFFC))
 
+# ---- ruby font: a second, kana-only glyph set (data.dar 2309, texture #1, 24px cells, 85 per row; 112 glyphs, count at
+#      ruby_cnt "li r3,0x70", source string at ruby_str expanded at start-up like the main table). The Cantonese ruby uses
+#      ideographs, so rebuild it: old glyphs + every character the ruby texts need, as a static pre-expanded array.
+RUBY = None
+if "ruby_cnt" in EB:
+    assert struct.unpack(">I", elf[EB["ruby_cnt"]:EB["ruby_cnt"] + 4])[0] == 0x38600070, "ruby count differs"
+    R_ = EB["ruby_arr"]; assert elf[R_] >> 2 == 0x12 and struct.unpack(">I", elf[R_ + 4:R_ + 8])[0] == 0x60000000
+    S_ = EB["ruby_src"]; rv = EB["ruby_str"] + 0x10000
+    assert elf[S_:S_ + 8] == struct.pack(">II", 0x3C600000 | (rv + 0x8000 >> 16), 0x30630000 | (rv & 0xFFFF)), "ruby source differs"
+    old_r, k_ = [], EB["ruby_str"]
+    while elf[k_]:
+        b_ = elf[k_]
+        if 0x81 <= b_ <= 0x9F or b_ >= 0xE0: old_r.append((b_ << 8) | elf[k_ + 1]); k_ += 2
+        else: old_r.append(b_); k_ += 1
+    assert len(old_r) == 0x70
+    want = set()
+    for name, orig, fields, m in plans:
+        for t in m.values():
+            for rb in re.findall(r"<R[^|>]*\|([^>]*)>", t):
+                for ch in rb:
+                    ch = norm_char(ch)
+                    if ch not in ASCII_OK: want.add(code_of.get(ch) or new_code[ch])
+    new_r = sorted(set(old_r) | want)
+    RUBY = (old_r, new_r)
+    RARR = 0x123400; assert RARR + 2 * len(new_r) < EMPTY and set(elf[RARR:RARR + 2 * len(new_r)]) == {0}
+    elf[RARR:RARR + 2 * len(new_r)] = b"".join(struct.pack(">H", expand(c)) for c in new_r)
+    elf[EB["ruby_cnt"] + 2:EB["ruby_cnt"] + 4] = struct.pack(">H", len(new_r))
+    ra = RARR + 0x10000
+    elf[R_:R_ + 8] = struct.pack(">II", 0x3C600000 | (ra >> 16), 0x60630000 | (ra & 0xFFFF))       # lis/ori static array
+    ev_ = EMPTY + 0x10000
+    elf[S_:S_ + 8] = struct.pack(">II", 0x3C600000 | (ev_ >> 16), 0x30630000 | (ev_ & 0xFFFF))     # empty source string
+    print("ruby glyphs: %d -> %d (+%d)" % (len(old_r), len(new_r), len(new_r) - len(old_r)))
+
 # scripts -> appended as a new PT_LOAD segment (VA 0x1200000)
 NEWVA = (EB["seg1"][1] + EB["seg1"][3] + 0xFF) & ~0xFF   # first 0x100-aligned address after .bss
 entries = {e[1]: e for e in w.entries(bytes(elf))}
@@ -523,6 +560,25 @@ t0n = bytearray(t0[:0x80]) + img.astype(">u2").tobytes()
 struct.pack_into(">I", t0n, 4, len(t0n) - 0x80); struct.pack_into(">I", t0n, 0x14, len(t0n) - 0x80)
 struct.pack_into(">H", t0n, 0x22, H1)
 parts = [bytes(t0n)] + [pk[o:o+s] for o, s in ents[1:]]
+if RUBY:
+    old_r, new_r = RUBY; RC, RCOLS = 24, 85
+    t1 = bytearray(pk[ents[1][0]:ents[1][0] + ents[1][1]])
+    W1, H1o = struct.unpack(">HH", t1[0x20:0x24]); assert (W1, H1o) == (2040, 48)
+    old_img = np.frombuffer(bytes(t1[0x80:0x80 + W1 * H1o * 2]), dtype=">u2").reshape(H1o, W1)
+    H1n = (len(new_r) + RCOLS - 1) // RCOLS * RC
+    rimg = np.zeros((H1n, W1), np.uint16)
+    oidx = {c: i for i, c in enumerate(old_r)}
+    for i, c in enumerate(new_r):
+        r_, c_ = divmod(i, RCOLS)
+        if c in oidx:
+            ro, co = divmod(oidx[c], RCOLS); cell = old_img[ro*RC:(ro+1)*RC, co*RC:(co+1)*RC]
+        else:
+            ch = code2char(c) if c < 0xF000 else need[[new_code[x] for x in need].index(c)]
+            cell = render_cell(ch, size=11, cx=20, cy=20.5, weight="Medium", stroke=1)[8:32, 8:32]     # matches the kana's ink box
+        rimg[r_*RC:(r_+1)*RC, c_*RC:(c_+1)*RC] = cell
+    t1n = bytearray(t1[:0x80]) + rimg.astype(">u2").tobytes()
+    struct.pack_into(">I", t1n, 4, len(t1n) - 0x80); struct.pack_into(">I", t1n, 0x14, len(t1n) - 0x80); struct.pack_into(">H", t1n, 0x22, H1n)
+    parts[1] = bytes(t1n)
 body = bytearray(pk[:0x40]); offs = []; p = 0x40
 for part in parts:
     offs.append(p); p = (p + len(part) + 0x3F) // 0x40 * 0x40
